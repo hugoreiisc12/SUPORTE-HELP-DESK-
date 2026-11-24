@@ -1,0 +1,6 @@
+{
+  "name": "Portal JFC — Central de FAQ",
+  "description": "Central de FAQ, perguntas recentes, Top 10 mais perguntados e registro de ocorrências da Comprove.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

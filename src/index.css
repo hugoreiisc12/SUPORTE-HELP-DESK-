@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  --jfc-bg: #F6F6EE;
+  --jfc-fg: #1E2B22;
+  --jfc-ink: #11140d;
+  --jfc-primary: #2D6A45;
+  --jfc-primary-hover: #245a3a;
+  --jfc-primary-soft: #EDF3EE;
+  --jfc-muted: #5E6B60;
+  --jfc-border: #D6DCC8;
+  --jfc-card: #FDFDF9;
+  --jfc-harvest: #E8C75A;
+  --jfc-accent: #E0732A;
+  --jfc-orange: #F28C28;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    background-color: var(--jfc-bg);
+    color: var(--jfc-fg);
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--jfc-bg);
+    color: var(--jfc-fg);
+  }
+}
+
+.font-editorial {
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+.font-mono-tabular {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
