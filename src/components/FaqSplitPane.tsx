@@ -7,18 +7,12 @@ import {
   AlertCircle,
   ThumbsUp,
   Image as ImageIcon,
-  Edit3,
-  Check,
   ChevronRight,
   FileCheck2,
   Heart,
   PartyPopper,
 } from 'lucide-react';
-import {
-  FaqItem,
-  RESOLUTION_STATUSES,
-  ResolutionStatus,
-} from '../types/faq';
+import { FaqItem, ResolutionStatus } from '../types/faq';
 import { Reactions, Reaction, ReactionOption } from './ui/reactions';
 
 const FAQ_REACTION_OPTIONS: ReactionOption[] = [
@@ -56,11 +50,6 @@ interface FaqSplitPaneProps {
   onSelect: (id: string) => void;
   showRankNumbers: boolean;
   onUpvote: (id: string) => void;
-  onUpdateResolution: (
-    id: string,
-    status: ResolutionStatus,
-    resolutionText: string
-  ) => void;
   onOpenImage: (url: string, title: string) => void;
   upvotedIds: string[];
 }
@@ -113,17 +102,11 @@ export const FaqSplitPane: React.FC<FaqSplitPaneProps> = ({
   onSelect,
   showRankNumbers,
   onUpvote,
-  onUpdateResolution,
   onOpenImage,
   upvotedIds,
 }) => {
   const activeItem = items.find((item) => item.id === selectedId) ?? items[0];
 
-  const [isEditingResolution, setIsEditingResolution] = useState(false);
-  const [draftStatus, setDraftStatus] = useState<ResolutionStatus>(
-    activeItem?.resolutionStatus ?? 'Pendente'
-  );
-  const [draftText, setDraftText] = useState(activeItem?.resolutionText ?? '');
   const [extraReactionsByFaq, setExtraReactionsByFaq] = useState<
     Record<string, Reaction[]>
   >(() => {
@@ -181,17 +164,7 @@ export const FaqSplitPane: React.FC<FaqSplitPaneProps> = ({
   };
 
   const handleSelectItem = (item: FaqItem) => {
-    setIsEditingResolution(false);
-    setDraftStatus(item.resolutionStatus);
-    setDraftText(item.resolutionText);
     onSelect(item.id);
-  };
-
-  const handleSaveResolution = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!draftText.trim()) return;
-    onUpdateResolution(activeItem.id, draftStatus, draftText.trim());
-    setIsEditingResolution(false);
   };
 
   return (
@@ -326,7 +299,7 @@ export const FaqSplitPane: React.FC<FaqSplitPaneProps> = ({
               </p>
             </div>
 
-            {/* Official Resolution Box */}
+            {/* Official Resolution Box (Read-only for users, controlled by Help Desk) */}
             <div
               className={`mt-5 rounded-xl border border-[#D6DCC8] p-4 ${resMeta.surfaceTint}`}
             >
@@ -337,75 +310,14 @@ export const FaqSplitPane: React.FC<FaqSplitPaneProps> = ({
                     Resposta & Resolução — {activeItem.resolutionStatus}
                   </h4>
                 </div>
-
-                {!isEditingResolution && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraftStatus(activeItem.resolutionStatus);
-                      setDraftText(activeItem.resolutionText);
-                      setIsEditingResolution(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[#D6DCC8] bg-[#FDFDF9] px-2.5 py-1 text-xs font-medium text-[#1E2B22] transition-colors hover:border-[#2D6A45] hover:text-[#2D6A45]"
-                  >
-                    <Edit3 className="h-3 w-3" />
-                    Atualizar Resolução
-                  </button>
-                )}
+                <span className="text-[11px] font-medium text-[#5E6B60]">
+                  Definido pelo Help Desk
+                </span>
               </div>
 
-              {!isEditingResolution ? (
-                <p className="mt-2.5 text-sm leading-relaxed text-[#1E2B22]">
-                  {activeItem.resolutionText}
-                </p>
-              ) : (
-                <form onSubmit={handleSaveResolution} className="mt-3 space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-[#1E2B22]">
-                      Status da Resolução
-                    </label>
-                    <select
-                      value={draftStatus}
-                      onChange={(e) => setDraftStatus(e.target.value as ResolutionStatus)}
-                      className="mt-1 w-full rounded-lg border border-[#D6DCC8] bg-white px-3 py-2 text-xs text-[#1E2B22] focus:border-[#2D6A45] focus:outline-none"
-                    >
-                      {RESOLUTION_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-[#1E2B22]">
-                      Texto da Resolução / Orientação
-                    </label>
-                    <textarea
-                      rows={3}
-                      required
-                      value={draftText}
-                      onChange={(e) => setDraftText(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-[#D6DCC8] bg-white px-3 py-2 text-xs leading-relaxed text-[#1E2B22] focus:border-[#2D6A45] focus:outline-none"
-                    />
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingResolution(false)}
-                      className="rounded-lg border border-[#D6DCC8] bg-white px-3 py-1.5 text-xs font-medium text-[#1E2B22]"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="submit"
-                      className="inline-flex items-center gap-1 rounded-lg bg-[#2D6A45] px-3 py-1.5 text-xs font-semibold text-[#F9FAF5] hover:bg-[#245a3a]"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      Salvar Resolução
-                    </button>
-                  </div>
-                </form>
-              )}
+              <p className="mt-2.5 text-sm leading-relaxed text-[#1E2B22]">
+                {activeItem.resolutionText}
+              </p>
             </div>
 
             {/* Attached Visual Evidence (if present) */}

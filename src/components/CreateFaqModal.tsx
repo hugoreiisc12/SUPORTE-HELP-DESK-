@@ -16,8 +16,6 @@ import {
   FaqItem,
   PROBLEM_FIELDS,
   ProblemField,
-  RESOLUTION_STATUSES,
-  ResolutionStatus,
   SeverityLevel,
 } from '../types/faq';
 
@@ -95,8 +93,6 @@ export const CreateFaqModal: React.FC<CreateFaqModalProps> = ({
   const [specificScreen, setSpecificScreen] = useState('');
   const [bugType, setBugType] = useState<BugType>('Falha de Sincronização');
   const [bugSubType, setBugSubType] = useState('');
-  const [resolutionStatus, setResolutionStatus] = useState<ResolutionStatus>('Pendente');
-  const [resolutionText, setResolutionText] = useState('');
 
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
   const [imageName, setImageName] = useState<string | undefined>(undefined);
@@ -181,8 +177,6 @@ export const CreateFaqModal: React.FC<CreateFaqModalProps> = ({
     setSpecificScreen('');
     setBugType('Falha de Sincronização');
     setBugSubType('');
-    setResolutionStatus('Pendente');
-    setResolutionText('');
     setImageUrl(undefined);
     setImageName(undefined);
     setImpactId('imp-2');
@@ -203,12 +197,6 @@ export const CreateFaqModal: React.FC<CreateFaqModalProps> = ({
       problemDescription.trim().split(/[.!?\n]/)[0].slice(0, 92) +
         (problemDescription.trim().length > 92 ? '...' : '');
 
-    const defaultResolution =
-      resolutionText.trim() ||
-      (resolutionStatus === 'Pendente'
-        ? 'Ocorrência registrada recentemente e aguardando triagem da equipe técnica da Comprove.'
-        : 'Em análise pela equipe operacional para definição de solução definitiva.');
-
     onSubmit({
       title: derivedTitle,
       problemDescription: problemDescription.trim(),
@@ -216,8 +204,9 @@ export const CreateFaqModal: React.FC<CreateFaqModalProps> = ({
       specificScreen: specificScreen.trim() || 'Tela geral do módulo',
       bugType,
       bugSubType: bugSubType.trim() || 'Ocorrência reportada pelo usuário',
-      resolutionStatus,
-      resolutionText: defaultResolution,
+      resolutionStatus: 'Pendente',
+      resolutionText:
+        'Solicitação registrada e encaminhada ao suporte Help Desk. Aguardando triagem e definição oficial do suporte.',
       severity: severityInfo.level,
       severityScore: totalScore,
       severityBreakdown: {
@@ -632,47 +621,6 @@ export const CreateFaqModal: React.FC<CreateFaqModalProps> = ({
               </div>
 
               <p className="mt-4 text-xs text-[#5E6B60]">{severityInfo.description}</p>
-            </div>
-
-            {/* Resolução Inicial / Status (Opcional) */}
-            <div className="grid grid-cols-1 gap-4 border-t border-[#D6DCC8] pt-5 md:grid-cols-3">
-              <div>
-                <label
-                  htmlFor="faq-initial-status"
-                  className="block text-sm font-semibold text-[#1E2B22]"
-                >
-                  Status da Resolução
-                </label>
-                <select
-                  id="faq-initial-status"
-                  value={resolutionStatus}
-                  onChange={(e) => setResolutionStatus(e.target.value as ResolutionStatus)}
-                  className="mt-2 w-full rounded-xl border border-[#D6DCC8] bg-white px-3.5 py-2.5 text-sm text-[#1E2B22] focus:border-[#2D6A45] focus:outline-none focus:ring-2 focus:ring-[#2D6A45]/20"
-                >
-                  {RESOLUTION_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label
-                  htmlFor="faq-resolution-text"
-                  className="block text-sm font-semibold text-[#1E2B22]"
-                >
-                  Resolução ou Contorno Conhecido (opcional)
-                </label>
-                <input
-                  id="faq-resolution-text"
-                  type="text"
-                  value={resolutionText}
-                  onChange={(e) => setResolutionText(e.target.value)}
-                  placeholder="Caso já exista uma solução temporária ou resposta oficial, informe aqui..."
-                  className="mt-2 w-full rounded-xl border border-[#D6DCC8] bg-white px-3.5 py-2.5 text-sm text-[#1E2B22] placeholder:text-[#5E6B60]/60 focus:border-[#2D6A45] focus:outline-none focus:ring-2 focus:ring-[#2D6A45]/20"
-                />
-              </div>
             </div>
           </div>
 

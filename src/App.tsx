@@ -15,20 +15,29 @@ import {
   LogOut,
   LogIn,
   Trash2,
+  Headset,
+  BookOpen,
 } from 'lucide-react';
 import { INITIAL_FAQS } from './data/initialFaqs';
+import { INITIAL_TICKETS } from './data/initialTickets';
 import {
   FaqItem,
   RESOLUTION_STATUSES,
   ResolutionStatus,
+  SeverityLevel,
 } from './types/faq';
+import { HelpDeskTicket, TicketMessage } from './types/helpdesk';
 import { CreateFaqModal } from './components/CreateFaqModal';
 import { FaqSplitPane } from './components/FaqSplitPane';
+import { HelpDeskPage } from './components/HelpDeskPage';
 import { ColdEmailCrowdHero } from './components/ui/cold-email-crowd-hero';
 
 const STORAGE_KEY_FAQS = 'portal_jfc_faqs_v1';
 const STORAGE_KEY_UPVOTES = 'portal_jfc_upvotes_v1';
 const STORAGE_KEY_USER = 'comprove_user_profile_v1';
+const STORAGE_KEY_TICKETS = 'comprove_helpdesk_tickets_v1';
+
+type ActivePage = 'faq' | 'helpdesk';
 
 interface UserProfile {
   isLoggedIn: boolean;
@@ -43,7 +52,20 @@ const DEFAULT_USER: UserProfile = {
   email: 'hugoreiis12@gmail.com',
 };
 
+function computeSlaDeadline(severity: SeverityLevel, createdAtIso: string): string {
+  const base = new Date(createdAtIso).getTime();
+  const hoursBySeverity: Record<SeverityLevel, number> = {
+    Crítica: 2,
+    Alta: 6,
+    Média: 24,
+    Baixa: 48,
+  };
+  return new Date(base + hoursBySeverity[severity] * 3600 * 1000).toISOString();
+}
+
 export function App() {
+  const [activePage, setActivePage] = useState<ActivePage>('faq');
+
   const [user, setUser] = useState<UserProfile>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_USER);
@@ -70,6 +92,19 @@ export function App() {
     return INITIAL_FAQS;
   });
 
+  const [tickets, setTickets] = useState<HelpDeskTicket[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_TICKETS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // Fallback to initial Help Desk queue
+    }
+    return INITIAL_TICKETS;
+  });
+
   const [upvotedIds, setUpvotedIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_UPVOTES);
@@ -88,6 +123,9 @@ export function App() {
   const [showAllFaqs, setShowAllFaqs] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(INITIAL_FAQS[0]?.id ?? null);
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(
+    INITIAL_TICKETS[0]?.id ?? null
+  );
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<{ url: string; title: string } | null>(
@@ -125,6 +163,14 @@ export function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(STORAGE_KEY_TICKETS, JSON.stringify(tickets));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [tickets]);
+
+  useEffect(() => {
+    try {
       localStorage.setItem(STORAGE_KEY_UPVOTES, JSON.stringify(upvotedIds));
     } catch {
       // Ignore storage quota errors
@@ -156,6 +202,11 @@ export function App() {
     });
     return counts;
   }, [faqs]);
+
+  const openTicketCount = useMemo(
+    () => tickets.filter((t) => t.status !== 'Resolvido').length,
+    [tickets]
+  );
 
   const filteredAndSortedFaqs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -201,6 +252,17 @@ export function App() {
     setSearchQuery('');
   };
 
+  const handleSwitchPage = (page: ActivePage, targetFaqId?: string) => {
+    setActivePage(page);
+    if (page === 'faq' && targetFaqId) {
+      setResolutionFilter('Todos');
+      setSearchQuery('');
+      setShowAllFaqs(true);
+      setSelectedId(targetFaqId);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleCreateFaq = (
     payload: Omit<FaqItem, 'id' | 'code' | 'askCount' | 'createdAt' | 'updatedAt'>
   ) => {
@@ -215,16 +277,65 @@ export function App() {
       updatedAt: nowIso,
     };
 
+    const nextTicketNumber = 2042 + tickets.length;
+    const newTicket: HelpDeskTicket = {
+      id: `hd-${Date.now()}`,
+      ticketCode: `HD-${nextTicketNumber}`,
+      linkedFaqId: newItem.id,
+      linkedFaqCode: newItem.code,
+      title: newItem.title,
+      problemDescription: newItem.problemDescription,
+      problemField: newItem.problemField,
+      specificScreen: newItem.specificScreen,
+      bugType: newItem.bugType,
+      bugSubType: newItem.bugSubType,
+      severity: newItem.severity,
+      severityScore: newItem.severityScore,
+      severityBreakdown: newItem.severityBreakdown,
+      status: payload.resolutionStatus === 'Resolvido' ? 'Resolvido' : 'Novo',
+      requesterName: user.name,
+      requesterEmail: user.email,
+      requesterUnit: 'Operação Comprove',
+      assignedAgent: 'Não atribuído',
+      slaDeadline: computeSlaDeadline(newItem.severity, nowIso),
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      imageUrl: newItem.imageUrl,
+      imageName: newItem.imageName,
+      resolutionSummary: newItem.resolutionText,
+      faqTargetStatus: newItem.resolutionStatus,
+      syncedToFaq: true,
+      messages: [
+        {
+          id: `msg-${Date.now()}`,
+          authorName: user.name,
+          authorRole: 'solicitante',
+          message: newItem.problemDescription,
+          timestamp: nowIso,
+        },
+      ],
+    };
+
     setFaqs((prev) => [newItem, ...prev]);
+    setTickets((prev) => [newTicket, ...prev]);
     setResolutionFilter('Todos');
     setSearchQuery('');
     setShowAllFaqs(true);
     setSelectedId(newItem.id);
-    setToastMessage(`Novo ${newItem.code} publicado na central.`);
+    setSelectedTicketId(newTicket.id);
 
-    const listEl = document.getElementById('lista-faqs');
-    if (listEl) {
-      listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (activePage === 'helpdesk') {
+      setToastMessage(
+        `Chamado ${newTicket.ticketCode} aberto na fila e vinculado ao ${newItem.code}.`
+      );
+    } else {
+      setToastMessage(
+        `${newItem.code} publicado e enviado para o Help Desk (${newTicket.ticketCode}).`
+      );
+      const listEl = document.getElementById('lista-faqs');
+      if (listEl) {
+        listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 
@@ -242,34 +353,220 @@ export function App() {
     );
   };
 
-  const handleUpdateResolution = (
-    id: string,
-    status: ResolutionStatus,
-    resolutionText: string
+  const handleUpdateTicketMeta = (
+    ticketId: string,
+    updates: Partial<Pick<HelpDeskTicket, 'status' | 'assignedAgent'>>
   ) => {
     const nowIso = new Date().toISOString();
-    setFaqs((prev) =>
-      prev.map((item) =>
-        item.id === id
+    const targetTicket = tickets.find((t) => t.id === ticketId);
+
+    const mappedFaqStatus: ResolutionStatus | undefined = updates.status
+      ? updates.status === 'Resolvido'
+        ? 'Resolvido'
+        : updates.status === 'Novo'
+          ? 'Pendente'
+          : 'Em Análise'
+      : undefined;
+
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId
           ? {
-              ...item,
-              resolutionStatus: status,
-              resolutionText,
+              ...t,
+              ...updates,
+              ...(mappedFaqStatus ? { faqTargetStatus: mappedFaqStatus } : {}),
               updatedAt: nowIso,
             }
-          : item
+          : t
       )
     );
-    setToastMessage(`Resolução atualizada para "${status}".`);
+
+    if (mappedFaqStatus && targetTicket?.linkedFaqId) {
+      setFaqs((prev) =>
+        prev.map((f) =>
+          f.id === targetTicket.linkedFaqId
+            ? {
+                ...f,
+                resolutionStatus: mappedFaqStatus,
+                updatedAt: nowIso,
+              }
+            : f
+        )
+      );
+    }
+
+    if (updates.status) {
+      setToastMessage(
+        targetTicket?.linkedFaqCode
+          ? `Status alterado para "${updates.status}" e refletido no ${targetTicket.linkedFaqCode}.`
+          : `Status do chamado alterado para "${updates.status}".`
+      );
+    } else if (updates.assignedAgent) {
+      setToastMessage(`Chamado atribuído para ${updates.assignedAgent}.`);
+    }
+  };
+
+  const handleAddTicketMessage = (
+    ticketId: string,
+    message: string,
+    isInternalNote: boolean
+  ) => {
+    const nowIso = new Date().toISOString();
+    const newMsg: TicketMessage = {
+      id: `msg-${Date.now()}`,
+      authorName: `${user.name} · Suporte`,
+      authorRole: 'suporte',
+      message,
+      timestamp: nowIso,
+      isInternalNote,
+    };
+
+    const targetTicket = tickets.find((t) => t.id === ticketId);
+    const shouldMoveToInAnalysis =
+      !isInternalNote && targetTicket?.status === 'Novo';
+
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId
+          ? {
+              ...t,
+              status: shouldMoveToInAnalysis ? 'Em Atendimento' : t.status,
+              ...(shouldMoveToInAnalysis
+                ? { faqTargetStatus: 'Em Análise' as ResolutionStatus }
+                : {}),
+              assignedAgent:
+                t.assignedAgent === 'Não atribuído'
+                  ? `${user.name} · Suporte`
+                  : t.assignedAgent,
+              updatedAt: nowIso,
+              messages: [...t.messages, newMsg],
+            }
+          : t
+      )
+    );
+
+    if (shouldMoveToInAnalysis && targetTicket?.linkedFaqId) {
+      setFaqs((prev) =>
+        prev.map((f) =>
+          f.id === targetTicket.linkedFaqId && f.resolutionStatus === 'Pendente'
+            ? { ...f, resolutionStatus: 'Em Análise', updatedAt: nowIso }
+            : f
+        )
+      );
+    }
+
+    setToastMessage(
+      isInternalNote
+        ? 'Nota interna registrada no chamado.'
+        : 'Resposta enviada ao solicitante.'
+    );
+  };
+
+  const handleResolveTicketAndSyncFaq = (
+    ticketId: string,
+    resolutionSummary: string,
+    faqStatus: ResolutionStatus
+  ) => {
+    const nowIso = new Date().toISOString();
+    const targetTicket = tickets.find((t) => t.id === ticketId);
+    if (!targetTicket) return;
+
+    const syncNote: TicketMessage = {
+      id: `msg-sync-${Date.now()}`,
+      authorName: `${user.name} · Suporte`,
+      authorRole: 'suporte',
+      message: `Resolução oficial (${faqStatus}) publicada no FAQ: ${resolutionSummary}`,
+      timestamp: nowIso,
+    };
+
+    const nextTicketStatus =
+      faqStatus === 'Resolvido'
+        ? 'Resolvido'
+        : faqStatus === 'Pendente'
+          ? 'Novo'
+          : 'Em Atendimento';
+
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId
+          ? {
+              ...t,
+              status: nextTicketStatus,
+              assignedAgent:
+                t.assignedAgent === 'Não atribuído'
+                  ? `${user.name} · Suporte`
+                  : t.assignedAgent,
+              resolutionSummary,
+              faqTargetStatus: faqStatus,
+              syncedToFaq: true,
+              updatedAt: nowIso,
+              messages: [...t.messages, syncNote],
+            }
+          : t
+      )
+    );
+
+    if (targetTicket.linkedFaqId) {
+      setFaqs((prev) =>
+        prev.map((f) =>
+          f.id === targetTicket.linkedFaqId
+            ? {
+                ...f,
+                resolutionStatus: faqStatus,
+                resolutionText: resolutionSummary,
+                updatedAt: nowIso,
+              }
+            : f
+        )
+      );
+      setToastMessage(
+        `${targetTicket.ticketCode} atualizado e sincronizado com ${targetTicket.linkedFaqCode}.`
+      );
+    } else {
+      const nextNumber = faqs.length + 1;
+      const createdFaq: FaqItem = {
+        id: `faq-${Date.now()}`,
+        code: `FAQ-${String(nextNumber).padStart(2, '0')}`,
+        title: targetTicket.title,
+        problemDescription: targetTicket.problemDescription,
+        problemField: targetTicket.problemField,
+        specificScreen: targetTicket.specificScreen,
+        bugType: targetTicket.bugType,
+        bugSubType: targetTicket.bugSubType,
+        resolutionStatus: faqStatus,
+        resolutionText: resolutionSummary,
+        severity: targetTicket.severity,
+        severityScore: targetTicket.severityScore,
+        severityBreakdown: targetTicket.severityBreakdown,
+        askCount: 1,
+        createdAt: targetTicket.createdAt,
+        updatedAt: nowIso,
+        imageUrl: targetTicket.imageUrl,
+        imageName: targetTicket.imageName,
+      };
+      setFaqs((prev) => [createdFaq, ...prev]);
+      setTickets((prev) =>
+        prev.map((t) =>
+          t.id === ticketId
+            ? { ...t, linkedFaqId: createdFaq.id, linkedFaqCode: createdFaq.code }
+            : t
+        )
+      );
+      setToastMessage(
+        `${targetTicket.ticketCode} concluído e publicado como ${createdFaq.code}.`
+      );
+    }
   };
 
   const handleResetDemoData = () => {
     setFaqs(INITIAL_FAQS);
+    setTickets(INITIAL_TICKETS);
     setUpvotedIds([]);
     handleClearFilters();
     setShowAllFaqs(false);
     setSelectedId(INITIAL_FAQS[0]?.id ?? null);
-    setToastMessage('Base padrão da Comprove restaurada.');
+    setSelectedTicketId(INITIAL_TICKETS[0]?.id ?? null);
+    setToastMessage('Base padrão de FAQs e chamados restaurada.');
   };
 
   const handleProfilePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,12 +746,13 @@ export function App() {
   return (
     <MotionConfig reducedMotion="user">
     <div className="min-h-screen bg-[#F6F6EE] text-[#1E2B22]">
-      {/* Top Bar Contract: Zone 1 Brand — Zone 2 Nav Links — Zone 3 Primary Action + Profile Icon */}
+      {/* Top Bar Contract: Zone 1 Brand — Zone 2 Nav Links — Zone 3 Switcher + Primary Action + Profile Icon */}
       <header className="sticky top-0 z-40 border-b border-[#D6DCC8] bg-[#FDFDF9]/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-8 px-4 py-3.5 sm:px-6">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:gap-8 sm:px-6">
           {/* Zone 1: Single-line Brand Wordmark with Lateral Fade-in */}
-          <a
-            href="#entrada-faq"
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="flex shrink-0 items-center gap-2.5 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2D6A45]"
           >
             {!logoImgFailed ? (
@@ -477,53 +775,107 @@ export function App() {
             >
               Comprove
             </motion.span>
-          </a>
+          </button>
 
           {/* Zone 2: Clean Single-Line Text Navigation Links */}
-          <nav
-            aria-label="Navegação principal do FAQ"
-            className="hidden items-center gap-7 text-sm font-medium text-[#5E6B60] md:flex"
-          >
-            <button
-              type="button"
-              onClick={() => scrollToSection('entrada-faq')}
-              className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
+          {activePage === 'faq' ? (
+            <nav
+              aria-label="Navegação principal do FAQ"
+              className="hidden items-center gap-7 text-sm font-medium text-[#5E6B60] md:flex"
             >
-              Início
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToSection('filtros-resolucao')}
-              className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
+              <button
+                type="button"
+                onClick={() => scrollToSection('entrada-faq')}
+                className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
+              >
+                Início
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('filtros-resolucao')}
+                className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
+              >
+                Resoluções
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('lista-faqs', false)}
+                className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
+              >
+                Top 10
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollToSection('lista-faqs', true)}
+                className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
+              >
+                Todos os FAQs
+              </button>
+            </nav>
+          ) : (
+            <nav
+              aria-label="Navegação principal do Help Desk"
+              className="hidden items-center gap-7 text-sm font-medium text-[#5E6B60] md:flex"
             >
-              Resoluções
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToSection('lista-faqs', false)}
-              className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
-            >
-              Top 10
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToSection('lista-faqs', true)}
-              className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
-            >
-              Todos os FAQs
-            </button>
-          </nav>
+              <button
+                type="button"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="shrink-0 whitespace-nowrap font-semibold text-[#11140d] underline underline-offset-4"
+              >
+                Chamados Help Desk
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSwitchPage('faq')}
+                className="shrink-0 whitespace-nowrap transition-colors hover:text-[#11140d] hover:underline hover:underline-offset-4"
+              >
+                Central de FAQ
+              </button>
+            </nav>
+          )}
 
-          {/* Zone 3: Primary CTA + Profile Icon (Photo Upload & Session) */}
-          <div className="flex shrink-0 items-center gap-3">
+          {/* Zone 3: Page Switcher + Primary CTA + Profile Icon */}
+          <div className="flex shrink-0 items-center gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={() =>
+                handleSwitchPage(activePage === 'faq' ? 'helpdesk' : 'faq')
+              }
+              className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-[#D6DCC8] bg-[#FDFDF9] px-3.5 py-2 text-xs font-semibold text-[#1E2B22] transition-colors hover:border-[#2D6A45] hover:bg-[#EDF3EE] hover:text-[#2D6A45] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2D6A45] sm:text-sm"
+            >
+              {activePage === 'faq' ? (
+                <>
+                  <Headset className="h-4 w-4 text-[#2D6A45]" />
+                  <span>Help Desk</span>
+                  <span className="font-mono-tabular text-xs font-bold text-[#2D6A45]">
+                    ({openTicketCount})
+                  </span>
+                </>
+              ) : (
+                <>
+                  <BookOpen className="h-4 w-4 text-[#2D6A45]" />
+                  <span>Ir para FAQ</span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(true)}
               className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-[#2D6A45] px-4 py-2 text-sm font-semibold text-[#F9FAF5] transition-colors hover:bg-[#245a3a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2D6A45]"
             >
               <HelpCircle className="h-4 w-4" />
-              <span className="hidden sm:inline">Não encontrou sua resposta?</span>
-              <span className="sm:hidden">Nova dúvida</span>
+              {activePage === 'faq' ? (
+                <>
+                  <span className="hidden lg:inline">Não encontrou sua resposta?</span>
+                  <span className="lg:hidden">Nova dúvida</span>
+                </>
+              ) : (
+                <>
+                  <span className="hidden sm:inline">Abrir Chamado</span>
+                  <span className="sm:hidden">Chamado</span>
+                </>
+              )}
             </button>
 
             <button
@@ -576,6 +928,20 @@ export function App() {
         </div>
       )}
 
+      {activePage === 'helpdesk' ? (
+        <HelpDeskPage
+          tickets={tickets}
+          selectedTicketId={selectedTicketId}
+          onSelectTicket={(id) => setSelectedTicketId(id)}
+          currentUserName={user.name}
+          onUpdateTicketMeta={handleUpdateTicketMeta}
+          onAddMessage={handleAddTicketMessage}
+          onResolveAndSyncFaq={handleResolveTicketAndSyncFaq}
+          onOpenNewTicketModal={() => setIsCreateModalOpen(true)}
+          onSwitchToFaq={(faqId) => handleSwitchPage('faq', faqId)}
+          onOpenImage={(url, title) => setLightboxImage({ url, title })}
+        />
+      ) : (
       <main className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
         {/* ENTRADA DO FAQ (HERO) */}
         <section
@@ -820,7 +1186,6 @@ export function App() {
               onSelect={(id) => setSelectedId(id)}
               showRankNumbers={true}
               onUpvote={handleUpvote}
-              onUpdateResolution={handleUpdateResolution}
               onOpenImage={(url, title) => setLightboxImage({ url, title })}
               upvotedIds={upvotedIds}
             />
@@ -856,6 +1221,7 @@ export function App() {
           )}
         </section>
       </main>
+      )}
 
       {/* Clean Comprove Footer */}
       <motion.footer
@@ -871,7 +1237,7 @@ export function App() {
             <span className="mx-2" aria-hidden="true">
               ·
             </span>
-            <span>Central de FAQ e Ocorrências Operacionais</span>
+            <span>Central de FAQ e Atendimento Help Desk</span>
           </div>
           <button
             type="button"
@@ -879,7 +1245,7 @@ export function App() {
             className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-[#5E6B60] underline-offset-4 hover:text-[#2D6A45] hover:underline"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Restaurar FAQs iniciais
+            Restaurar dados iniciais
           </button>
         </div>
       </motion.footer>
